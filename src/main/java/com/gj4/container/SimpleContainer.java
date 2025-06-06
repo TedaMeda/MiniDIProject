@@ -3,9 +3,11 @@ package com.gj4.container;
 import com.gj4.Gj4Autowire;
 import com.gj4.annotations.Component;
 import com.gj4.annotations.PostConstruct;
+import com.gj4.annotations.PreDestroy;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,11 +16,13 @@ public class SimpleContainer {
     private final ThreadLocal<Set<Class<?>>> classStack;
     private final Map<String, Class<?>> namedBean;
     private final Map<Class<?>, Object> singletonCache;
+    private final List<Object> destroyables;
 
     public SimpleContainer() {
         this.classStack = ThreadLocal.withInitial(HashSet::new);
         this.namedBean = new HashMap<>();
         this.singletonCache = new ConcurrentHashMap<>();
+        this.destroyables = new ArrayList<>();
     }
 
     public <T> T getInstance(Class<T> clazz) throws Exception {
@@ -51,6 +55,7 @@ public class SimpleContainer {
                     }
                     singletonCache.put(clazz, instance);
                     invokePostConstruct(instance);
+                    addToDestroyable(instance);
                     return instance;
                 } finally {
                     this.classStack.get().remove(clazz);
@@ -73,9 +78,51 @@ public class SimpleContainer {
                     namedBean.put(beanName, clazz);
                 }
                 invokePostConstruct(instance);
+                addToDestroyable(instance);
                 return instance;
             } finally {
                 this.classStack.get().remove(clazz);
+            }
+        }
+    }
+
+    public Object getBeanByName(String name) throws Exception {
+        if (name.isBlank()) {
+            throw new RuntimeException("Empty bean name");
+        }
+        if (!namedBean.containsKey(name)) {
+            throw new RuntimeException("Bean with name: " + name + " does not exist");
+        }
+        Class<?> clazz = namedBean.get(name);
+        return clazz.cast(getInstance(clazz));
+    }
+
+    public void shutdown() throws InvocationTargetException, IllegalAccessException {
+        for(Object obj:destroyables){
+            destroy(obj);
+        }
+    }
+
+    private void destroy(Object instance) throws InvocationTargetException, IllegalAccessException {
+        Class<?> clazz = instance.getClass();
+        for(Method method:clazz.getDeclaredMethods()){
+            if(method.isAnnotationPresent(PreDestroy.class)){
+                method.setAccessible(true);
+                method.invoke(instance);
+            }
+        }
+    }
+
+    private <T> void addToDestroyable(Object instance) throws InvocationTargetException, IllegalAccessException {
+        Class<?> clazz = instance.getClass();
+        for(Method method:clazz.getDeclaredMethods()){
+            if(method.isAnnotationPresent(PreDestroy.class)){
+                method.setAccessible(true);
+                int params = method.getParameterCount();
+                if(params>0){
+                    throw new RuntimeException("Failed to invoke @PreDestroy: Method has parameters");
+                }
+                destroyables.add(instance);
             }
         }
     }
@@ -145,17 +192,6 @@ public class SimpleContainer {
         if (name.isBlank())
             name = Character.toLowerCase(clazz.getSimpleName().charAt(0)) + clazz.getSimpleName().substring(1);
         return name;
-    }
-
-    public Object getBeanByName(String name) throws Exception {
-        if (name.isBlank()) {
-            throw new RuntimeException("Empty bean name");
-        }
-        if (!namedBean.containsKey(name)) {
-            throw new RuntimeException("Bean with name: " + name + " does not exist");
-        }
-        Class<?> clazz = namedBean.get(name);
-        return clazz.cast(getInstance(clazz));
     }
 
     private <T> boolean isPrototype(Class<T> clazz) {
