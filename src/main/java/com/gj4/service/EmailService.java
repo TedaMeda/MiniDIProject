@@ -1,8 +1,5 @@
 package com.gj4.service;
 
-import com.gj4.annotations.Component;
-
-@Component(value = "emailServiceBean",scope = Component.Scope.SINGLETON)
 public class EmailService {
     public EmailService() {
         System.out.println("Email Service Created");

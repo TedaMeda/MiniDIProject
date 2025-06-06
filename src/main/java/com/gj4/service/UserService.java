@@ -1,9 +1,7 @@
 package com.gj4.service;
 
 import com.gj4.Gj4Autowire;
-import com.gj4.annotations.Component;
 
-@Component(value = "userServiceBean")
 public class UserService {
     private final EmailService emailService;
     private final SessionService sessionService;
