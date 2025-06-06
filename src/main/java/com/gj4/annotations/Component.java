@@ -8,8 +8,10 @@ import java.lang.annotation.Target;
 @Retention(value = RetentionPolicy.RUNTIME)
 @Target(value = ElementType.TYPE)
 public @interface Component {
-    String value() ;
+    String value() default "";
+
     Scope scope() default Scope.SINGLETON;
+
     public enum Scope {
         SINGLETON,
         PROTOTYPE
